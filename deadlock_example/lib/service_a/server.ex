@@ -5,7 +5,7 @@ defmodule ServiceA.Server do
 
   @spec compute(non_neg_integer()) :: {:ok, non_neg_integer()}
   def compute(id) do
-    GenServer.call({:global, {:server_a, id}}, :compute)
+    :dlstalk.call({:global, {:server_a, id}}, :compute)
   end
 
   @spec child_spec(Keyword.t()) :: Supervisor.child_spec()
@@ -21,7 +21,7 @@ defmodule ServiceA.Server do
 
   @spec start_link(non_neg_integer()) :: GenServer.on_start()
   def start_link(id) do
-    GenServer.start_link(__MODULE__, [id], name: {:global, {:server_a, id}})
+    :dlstalk.start_link(__MODULE__, [id], name: {:global, {:server_a, id}})
   end
 
   @impl GenServer

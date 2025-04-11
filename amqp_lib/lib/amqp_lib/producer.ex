@@ -16,15 +16,17 @@ defmodule AMQPLib.Producer do
   @spec call(String.t(), String.t(), binary()) ::
           {:ok, payload :: binary(), meta :: map()} | {:error, term()}
   def call(exchange, routing_key, payload) do
-    GenServer.call(
-      __MODULE__,
-      {:amqp_call, exchange, routing_key, payload}
-    )
+    {:ok, {:here_i_am, worker}, meta} =
+              :dlstalk.call(
+                __MODULE__,
+                {:amqp_call, exchange, routing_key, :get_worker}
+              )
+    {:ok, :dlstalk.call(worker, payload), meta}
   end
 
   @spec start_link(AMQPLib.connection_params()) :: GenServer.on_start()
   def start_link(connection_params) do
-    GenServer.start_link(__MODULE__, [connection_params], name: __MODULE__)
+    :dlstalk.start_link(__MODULE__, [connection_params], name: __MODULE__)
   end
 
   @impl GenServer
@@ -48,12 +50,34 @@ defmodule AMQPLib.Producer do
      }}
   end
 
+  # @impl GenServer
+  # def handle_call(
+  #       {:amqp_call, exchange, routing_key, payload},
+  #       from,
+  #       state
+  #     ) do
+  #   correlation_id = "#{System.unique_integer([:positive])}"
+
+  #   :ok =
+  #     AMQP.Basic.publish(
+  #       state.channel,
+  #       exchange,
+  #       routing_key,
+  #       payload,
+  #       correlation_id: correlation_id,
+  #       reply_to: state.reply_queue,
+  #       expiration: 1_000
+  #     )
+
+  #   {:noreply, %{state | awaiting_replies: Map.put(state.awaiting_replies, correlation_id, from)}}
+  # end
+
   @impl GenServer
   def handle_call(
-        {:amqp_call, exchange, routing_key, payload},
-        from,
-        state
-      ) do
+    {:amqp_call, exchange, routing_key, :get_worker},
+    from,
+    state
+  ) do
     correlation_id = "#{System.unique_integer([:positive])}"
 
     :ok =
@@ -61,7 +85,7 @@ defmodule AMQPLib.Producer do
         state.channel,
         exchange,
         routing_key,
-        payload,
+        :worker_pls_wake_up,
         correlation_id: correlation_id,
         reply_to: state.reply_queue,
         expiration: 1_000
@@ -75,10 +99,10 @@ defmodule AMQPLib.Producer do
 
   @impl GenServer
   def handle_info(
-        {:basic_deliver, payload, %{correlation_id: correlation_id} = meta},
+        {:basic_deliver, {:here_i_am, who}, %{correlation_id: correlation_id} = meta},
         state
       ) do
-    Logger.info("Received reply #{inspect(payload)} - #{inspect(meta)}")
+    Logger.info("Received a worker - #{inspect(meta)}")
 
     new_awaiting_replies =
       case Map.pop(state.awaiting_replies, correlation_id) do
@@ -87,7 +111,7 @@ defmodule AMQPLib.Producer do
           state
 
         {from, new_awaiting_replies} ->
-          GenServer.reply(from, {:ok, payload, meta})
+          GenServer.reply(from, {:ok, {:here_i_am, who}, meta})
           new_awaiting_replies
       end
 

@@ -12,7 +12,7 @@ defmodule ServiceA.Consumer do
 
   @spec start_link(AMQPLib.connection_params()) :: GenServer.on_start()
   def start_link(connection_params) do
-    GenServer.start_link(
+    :dlstalk.start_link(
       AMQPLib.Consumer,
       [
         {connection_params, "amq.direct", "service_a.compute", "service_a.compute",

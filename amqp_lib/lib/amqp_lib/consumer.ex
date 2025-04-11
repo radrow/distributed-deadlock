@@ -20,7 +20,8 @@ defmodule AMQPLib.Consumer do
            (binary(), map() -> {:reply, binary()})}
         ) :: GenServer.on_start()
   def start_link({connection_params, exchange, routing_key, queue, handler_fun}) do
-    GenServer.start_link(__MODULE__, [
+    # NOTE: THIS IS *NOT* CALLED IN DL TESTS
+    :dlstalk.start_link(__MODULE__, [ # NOTE: CHANGED
       {connection_params, exchange, routing_key, queue, handler_fun}
     ])
   end
@@ -47,14 +48,21 @@ defmodule AMQPLib.Consumer do
   def handle_info({:basic_consume_ok, _}, state), do: {:noreply, state}
 
   @impl GenServer
-  def handle_info({:basic_deliver, payload, meta}, state) do
-    :ok =
-      payload
-      |> state.handler_fun.(meta)
-      |> reply(meta, state)
+  def handle_info({:basic_deliver, :worker_pls_wake_up, meta}, state) do
+    :io.format("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ \\e[1;1mASDASDASADASADASDADADASDASDASD\n\n\n")
+    :ok = {:here_i_am, self()} |> reply(meta, state)
 
     {:noreply, state}
   end
+
+  @impl GenServer
+  def handle_call(payload, from, state) do
+    {:reply, r} = payload
+      |> state.handler_fun
+
+    {:reply, from, r}
+  end
+
 
   @impl GenServer
   def terminate(_reason, %{channel: channel, connection: connection, consumer_tag: tag}) do
@@ -66,11 +74,11 @@ defmodule AMQPLib.Consumer do
   end
 
   defp reply(
-         {:reply, resp_payload},
+         resp_payload,
          %{reply_to: reply_to, correlation_id: correlation_id} = meta,
          state
-       )
-       when is_binary(resp_payload) do
+       ) do
+
     case AMQP.Basic.publish(state.channel, "", reply_to, resp_payload,
            correlation_id: correlation_id
          ) do
