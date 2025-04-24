@@ -74,13 +74,20 @@ defmodule AMQPLib.Consumer do
         self_bin = :erlang.term_to_binary({:here_i_am, s})
         :ok = self_bin |> reply(meta, state.channel)
         dealer_loop(s, state)
+      {:EXIT, _, _} ->
+        dealer_die(state)
       :die ->
-        AMQP.Basic.cancel(state.channel, state.consumer_tag)
-        AMQP.Channel.close(state.channel)
-        AMQP.Connection.close(state.connection)
-        Logger.info("Consumer #{inspect({__MODULE__, self()})} terminating")
+        dealer_die(state)
         :erlang.send(s, :died)
+      {:basic_consume_ok, _} ->
+        dealer_loop(s, state)
     end
+  end
+  defp dealer_die(state) do
+    AMQP.Basic.cancel(state.channel, state.consumer_tag)
+    AMQP.Channel.close(state.channel)
+    AMQP.Connection.close(state.connection)
+    Logger.info("Consumer #{inspect({__MODULE__, self()})} terminating")
   end
 
   defp reply(

@@ -56,28 +56,6 @@ defmodule AMQPLib.Producer do
      }}
   end
 
-  # @impl GenServer
-  # def handle_call(
-  #       {:amqp_call, exchange, routing_key, payload},
-  #       from,
-  #       state
-  #     ) do
-  #   correlation_id = "#{System.unique_integer([:positive])}"
-
-  #   :ok =
-  #     AMQP.Basic.publish(
-  #       state.channel,
-  #       exchange,
-  #       routing_key,
-  #       payload,
-  #       correlation_id: correlation_id,
-  #       reply_to: state.reply_queue,
-  #       expiration: 1_000
-  #     )
-
-  #   {:noreply, %{state | awaiting_replies: Map.put(state.awaiting_replies, correlation_id, from)}}
-  # end
-
   @impl GenServer
   def handle_call(
     {:amqp_call, exchange, routing_key, :get_worker},
