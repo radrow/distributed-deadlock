@@ -16,17 +16,23 @@ defmodule AMQPLib.Producer do
   @spec call(String.t(), String.t(), binary()) ::
           {:ok, payload :: binary(), meta :: map()} | {:error, term()}
   def call(exchange, routing_key, payload) do
-    {:ok, {:here_i_am, worker}, meta} =
-              :dlstalk.call(
+    {:ok, worker_bin, meta} =
+              GenServer.call(
                 __MODULE__,
                 {:amqp_call, exchange, routing_key, :get_worker}
               )
-    {:ok, :dlstalk.call(worker, payload), meta}
+    {:here_i_am, worker} = :erlang.binary_to_term(worker_bin)
+    case :dlstalk.call(worker, {payload, meta}) do
+      {:'$dlstalk_deadlock_spread', l} -> throw({:deadlock, l})
+      res ->
+        res = :erlang.term_to_binary(res)
+        {:ok, res, meta}
+    end
   end
 
   @spec start_link(AMQPLib.connection_params()) :: GenServer.on_start()
   def start_link(connection_params) do
-    :dlstalk.start_link(__MODULE__, [connection_params], name: __MODULE__)
+    GenServer.start_link(__MODULE__, [connection_params], name: __MODULE__)
   end
 
   @impl GenServer
@@ -85,7 +91,7 @@ defmodule AMQPLib.Producer do
         state.channel,
         exchange,
         routing_key,
-        :worker_pls_wake_up,
+        "wake up bro",
         correlation_id: correlation_id,
         reply_to: state.reply_queue,
         expiration: 1_000
@@ -99,7 +105,7 @@ defmodule AMQPLib.Producer do
 
   @impl GenServer
   def handle_info(
-        {:basic_deliver, {:here_i_am, who}, %{correlation_id: correlation_id} = meta},
+        {:basic_deliver, data, %{correlation_id: correlation_id} = meta},
         state
       ) do
     Logger.info("Received a worker - #{inspect(meta)}")
@@ -111,7 +117,7 @@ defmodule AMQPLib.Producer do
           state
 
         {from, new_awaiting_replies} ->
-          GenServer.reply(from, {:ok, {:here_i_am, who}, meta})
+          GenServer.reply(from, {:ok, data, meta})
           new_awaiting_replies
       end
 

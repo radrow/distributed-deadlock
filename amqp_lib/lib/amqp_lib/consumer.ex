@@ -28,58 +28,68 @@ defmodule AMQPLib.Consumer do
 
   @impl GenServer
   def init([{connection_params, exchange, routing_key, queue, handler_fun}]) do
-    Process.flag(:trap_exit, true)
+    d = start_dealer(connection_params, exchange, routing_key, queue)
 
-    {:ok, connection} = Connection.open(connection_params)
-    {:ok, channel} = AMQP.Channel.open(connection)
-    {:ok, _} = AMQP.Queue.declare(channel, queue)
-    :ok = AMQP.Queue.bind(channel, queue, exchange, routing_key: routing_key)
-    :ok = AMQP.Basic.qos(channel, prefetch_count: 0)
-    {:ok, tag} = AMQP.Basic.consume(channel, queue, nil, no_ack: true)
-
-    Logger.info(
-      "Consumer started consuming from queue: #{inspect(queue)}. Consumer tag: #{inspect(tag)}"
-    )
-
-    {:ok, %{channel: channel, connection: connection, consumer_tag: tag, handler_fun: handler_fun}}
+    {:ok, %{dealer: d, handler_fun: handler_fun}}
   end
 
   @impl GenServer
   def handle_info({:basic_consume_ok, _}, state), do: {:noreply, state}
 
   @impl GenServer
-  def handle_info({:basic_deliver, :worker_pls_wake_up, meta}, state) do
-    :io.format("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ \\e[1;1mASDASDASADASADASDADADASDASDASD\n\n\n")
-    :ok = {:here_i_am, self()} |> reply(meta, state)
+  def handle_call({payload, meta}, from, state) do
+    {:reply, r} = state.handler_fun.(payload, meta)
 
-    {:noreply, state}
-  end
-
-  @impl GenServer
-  def handle_call(payload, from, state) do
-    {:reply, r} = payload
-      |> state.handler_fun
-
-    {:reply, from, r}
+    r = :erlang.binary_to_term(r)
+    {:reply, r, state}
   end
 
 
   @impl GenServer
-  def terminate(_reason, %{channel: channel, connection: connection, consumer_tag: tag}) do
-    AMQP.Basic.cancel(channel, tag)
-    AMQP.Channel.close(channel)
-    AMQP.Connection.close(connection)
-    Logger.info("Consumer #{inspect({__MODULE__, self()})} terminating")
-    :ok
+  def terminate(_reason, %{dealer: d}) do
+    :erlang.send(d, :die)
+    receive do
+      :died -> :ok
+    end
+  end
+
+  defp start_dealer(connection_params, exchange, routing_key, queue) do
+    s = :dlstalk.mon_self()
+    :erlang.spawn_link(fn () ->
+      Process.flag(:trap_exit, true)
+
+      {:ok, connection} = Connection.open(connection_params)
+      {:ok, channel} = AMQP.Channel.open(connection)
+      {:ok, _} = AMQP.Queue.declare(channel, queue)
+      :ok = AMQP.Queue.bind(channel, queue, exchange, routing_key: routing_key)
+      :ok = AMQP.Basic.qos(channel, prefetch_count: 0)
+      {:ok, tag} = AMQP.Basic.consume(channel, queue, nil, no_ack: true)
+
+      dealer_loop(s, %{channel: channel, connection: connection, consumer_tag: tag})
+    end)
+  end
+  defp dealer_loop(s, state) do
+    receive do
+      {:basic_deliver, "wake up bro", meta} ->
+        self_bin = :erlang.term_to_binary({:here_i_am, s})
+        :ok = self_bin |> reply(meta, state.channel)
+        dealer_loop(s, state)
+      :die ->
+        AMQP.Basic.cancel(state.channel, state.consumer_tag)
+        AMQP.Channel.close(state.channel)
+        AMQP.Connection.close(state.connection)
+        Logger.info("Consumer #{inspect({__MODULE__, self()})} terminating")
+        :erlang.send(s, :died)
+    end
   end
 
   defp reply(
          resp_payload,
          %{reply_to: reply_to, correlation_id: correlation_id} = meta,
-         state
+         chan
        ) do
 
-    case AMQP.Basic.publish(state.channel, "", reply_to, resp_payload,
+    case AMQP.Basic.publish(chan, "", reply_to, resp_payload,
            correlation_id: correlation_id
          ) do
       :ok ->

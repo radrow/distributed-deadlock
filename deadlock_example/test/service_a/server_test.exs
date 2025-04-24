@@ -8,8 +8,8 @@ defmodule ServiceA.ServerTest do
     log_opts = [{:logging_ets_known, logKnown},
                 {:logging_ets_fresh, logFresh},
                 {:live_log, :true},
-                {:trace_int, :false},
-                {:trace_proc, :false},
+                {:trace_int, :true},
+                {:trace_proc, :true},
                 {:trace_mon, :true},
                 {:indent, 0},
                ]
@@ -34,17 +34,17 @@ defmodule ServiceA.ServerTest do
   end
 
   describe "RPC request to compute" do
-    # test "id 1 works fine", %{connection_params: connection_params} do
-    #   id = 1
-    #   p0 = start_supervised!({AMQPLib.Producer, connection_params})
+    test "id 1 works fine", %{connection_params: connection_params} do
+      id = 1
+      p0 = start_supervised!({AMQPLib.Producer, connection_params})
 
-    #   sa = start_supervised!({ServiceA.Server, id: id})
-    #   ca = start_supervised!({ServiceA.Consumer, connection_params})
-    #   sb = start_supervised!({ServiceB.Server, id: id})
-    #   cb = start_supervised!({ServiceB.Consumer, connection_params})
+      sa = start_supervised!({ServiceA.Server, id: id})
+      ca = start_supervised!({ServiceA.Consumer, connection_params})
+      sb = start_supervised!({ServiceB.Server, id: id})
+      cb = start_supervised!({ServiceB.Consumer, connection_params})
 
-    #   assert {:ok, 1_000_000 + id} == ServiceA.Server.compute(id)
-    # end
+      assert {:ok, 1_000_000 + id} == ServiceA.Server.compute(id)
+    end
 
     test "id 42 has a bug and deadlocks until timeouts are triggered", %{
       connection_params: connection_params
@@ -64,33 +64,41 @@ defmodule ServiceA.ServerTest do
 
       pid_consumer_b = start_supervised!({ServiceB.Consumer, connection_params})
 
-      :tracer.add_tracee_glob({pid_server_a, :P, 0})
-      :tracer.add_tracee_glob({pid_server_b, :P, 1})
+
+      ppid_server_a =   :gen_statem.call(pid_server_a, :'$get_child')
+      ppid_server_b =   :gen_statem.call(pid_server_b,    :'$get_child')
+      ppid_consumer_a = :gen_statem.call(pid_consumer_a,  :'$get_child')
+      ppid_consumer_b = :gen_statem.call(pid_consumer_b,  :'$get_child')
+
+      :tracer.add_tracee_glob({pid_server_a, :M, 10})
+      :tracer.add_tracee_glob({pid_server_b, :M, 11})
       :tracer.add_tracee_glob({pid_producer, :I, 0})
-      :tracer.add_tracee_glob({pid_consumer_a, :M, 0})
-      :tracer.add_tracee_glob({pid_consumer_b, :M, 1})
+      :tracer.add_tracee_glob({pid_consumer_a, :M, 20})
+      :tracer.add_tracee_glob({pid_consumer_b, :M, 21})
+
+      :tracer.add_tracee_glob({ppid_server_a, :P, 10})
+      :tracer.add_tracee_glob({ppid_server_b, :P, 11})
+      # :tracer.add_tracee_glob({ppid_producer, :P, 0})
+      :tracer.add_tracee_glob({ppid_consumer_a, :P, 20})
+      :tracer.add_tracee_glob({ppid_consumer_b, :P, 21})
 
       bin_req = Proto.encode(42)
 
       try do
         {:ok, _res} = ServiceA.Api.compute(id)
-        assert false, "ServiceA.Api.compute(#{id}) call should have timed out"
+        assert false, "ServiceA.Api.compute(#{id}) call should have deadlocked"
       catch
-        :exit,
-        {:timeout,
-         {:gen_server, :call,
-          [_, {:amqp_call, "amq.direct", "service_a.compute", ^bin_req}, 5000]}} ->
-          assert true
+        :throw, {:deadlock, _} -> :ok
       end
 
       assert_receive(
         {:DOWN, ^ref_server_a, :process, ^pid_server_a,
          {:timeout,
           {:gen_statem, :call,
-           [_,
-            {{:amqp_call, "amq.direct", "service_b.compute", ^bin_req}, AMQPLib.Producer},
+           [^pid_server_a,
+            {{^bin_req, _}, _},
             5000]}}},
-        100
+        10000
       )
 
       refute Process.alive?(pid_server_a)
@@ -100,8 +108,8 @@ defmodule ServiceA.ServerTest do
         {:DOWN, ^ref_server_b, :process, ^pid_server_b,
          {:timeout,
           {:gen_statem, :call,
-           [_,
-            {{:amqp_call, "amq.direct", "service_a.compute", ^bin_req}, AMQPLib.Producer},
+           [^pid_server_b,
+            {{^bin_req, _}, _},
             5000]}}},
         100
       )
