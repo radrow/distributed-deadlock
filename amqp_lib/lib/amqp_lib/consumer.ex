@@ -21,7 +21,7 @@ defmodule AMQPLib.Consumer do
         ) :: GenServer.on_start()
   def start_link({connection_params, exchange, routing_key, queue, handler_fun}) do
     # NOTE: THIS IS *NOT* CALLED IN DL TESTS
-    :dlstalk.start_link(__MODULE__, [ # NOTE: CHANGED
+    :dlstalk.start_link(__MODULE__, [
       {connection_params, exchange, routing_key, queue, handler_fun}
     ])
   end

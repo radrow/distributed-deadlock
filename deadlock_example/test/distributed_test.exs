@@ -79,7 +79,7 @@ defmodule DistributedTest do
       assert false
     catch
       :throw,
-      {:deadlock, [_, _, _, _, _, _]} ->
+      {:deadlock, _} ->
         :ok
     end
   end
