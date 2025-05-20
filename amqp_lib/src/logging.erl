@@ -18,8 +18,9 @@
 -define(KNOWN_ETS, '$logging_known').
 -define(FRESH_ETS, '$logging_fresh').
 
--define(KNOWN, case get(?KNOWN_ETS) of undefined -> ?KNOWN_ETS; X -> X end).
--define(FRESH, case get(?FRESH_ETS) of undefined -> ?FRESH_ETS; X -> X end).
+-define(KNOWN, get(?KNOWN_ETS)).
+-define(FRESH, get(?FRESH_ETS)).
+
 
 mk_ets() ->
     Known = ets:new(?KNOWN_ETS, [public]),
@@ -30,7 +31,6 @@ mk_ets() ->
     {Known, Fresh}.
 
 delete() ->
-    io:format("DELETING ETS\n"),
     ets:delete(get(?KNOWN_ETS)),
     ets:delete(get(?FRESH_ETS)).
 
@@ -127,11 +127,6 @@ c_mon(Mon, SubId) ->
 c_init(Pid) when is_pid(Pid) ->
     {[blue, bold, invert], name(Pid)}.
 
-c_who({global, Term}) ->
-    case global:whereis_name(Term) of
-        undefined -> c_thing(Term);
-        Pid -> c_who(Pid)
-    end;
 c_who(Thing) ->
     case type(Thing) of
         'M' -> c_mon(Thing);
@@ -184,8 +179,8 @@ c_timeout() ->
     {[white, bold, underline, invert], "### TIMEOUT ###"}.
 
 
-%% c_msg(Msg) when is_tuple(Msg) andalso size(Msg) > 0 ->
-%%     c_msg(element(1, Msg));
+c_msg(Msg) when is_tuple(Msg) andalso size(Msg) > 0 ->
+    c_msg(element(1, Msg));
 c_msg(?YOU_DIED) ->
     c_deadlock_msg();
 c_msg(Msg) ->
@@ -195,7 +190,7 @@ c_deadlock_msg() ->
     {[red, dim], "D"}.
 
 c_thing(Thing) ->
-    {[white_l, bold, italic], lists:flatten(io_lib:format("~w", [Thing]))}.
+    {[white_l, bold, italic], lists:flatten(io_lib:format("~p", [Thing]))}.
 
 print(none) -> ok;
 print(Span) ->
@@ -208,23 +203,16 @@ print(Span) ->
 c_by(Who, Span) ->
     [ c_indent(Who), c_who(Who), ":\t " | Span].
 
-indent_size() ->
-    case get(?LOG_INDENT_SIZE) of
-        undefined ->
-            0;
-        X when is_integer(X) -> X
-    end.
 c_indent() ->
-
-    [$\t || _ <- lists:seq(1, indent_size())].
+    [$\t || _ <- lists:seq(1, get(?LOG_INDENT_SIZE))].
 c_indent(I) when is_integer(I) ->
-    case indent_size() of
+    case get(?LOG_INDENT_SIZE) of
         0 -> "";
         _ ->
             [c_indent() ++ "| " || _ <- lists:seq(1, I)]
     end;
 c_indent(Thing) ->
-    case indent_size() of
+    case get(?LOG_INDENT_SIZE) of
         0 -> "";
         _ ->
             "| " ++ c_indent(index(Thing))
@@ -260,6 +248,8 @@ c_state(unlocked) ->
     {[green, bold, invert], " UNLOCK "};
 c_state({locked, On}) ->
     [{[red_l, bold, invert], " LOCK "}, " (", c_probe(On), ")"];
+c_state({deadlocked, foreign}) ->
+    {[red, bold, underline, dim], "foreign deadlock"};
 c_state({deadlocked, [First|DL]}) ->
     [ {[red, bold, underline, invert], "### DEADLOCK ###\t"}
     , "("
@@ -442,6 +432,8 @@ ev_data_csv({release, Pid}) ->
     #{data_type=>release, data=>Pid};
 ev_data_csv(unlocked) ->
     #{data_type=>unlocked};
+ev_data_csv({deadlocked, foreign}) ->
+    #{data_type=>deadlocked, data=>foreign};
 ev_data_csv({deadlocked, L}) ->
     #{data_type=>deadlocked, data=>[index(X) || X <- L]};
 ev_data_csv({locked, On}) ->

@@ -4,9 +4,6 @@
 -include("dlstalk.hrl").
 
 -define(PROBE_DELAY, '$dlstalk_probe_delay').
--define(FORWARD, '$dlstalk_forward').
-
--export([mon_self/0]).
 
 %% API
 -export([start/3, start_link/2, start_link/3]).
@@ -23,7 +20,7 @@
 
 %% Internal state queries
 -export([ state_get_worker/1, state_get_req_tag/1, state_get_req_id/1, state_get_waitees/1
-        , deadstate_get_worker/1, deadstate_get_deadlock/1
+        , deadstate_get_worker/1, deadstate_get_deadlock/1, deadstate_is_foreign/1
         ]).
 
 %%%======================
@@ -37,7 +34,8 @@
               }).
 -record(deadstate,{worker :: pid(),
                    deadlock :: list(pid()),
-                   req_id :: gen_statem:request_id()
+                   req_id :: gen_statem:request_id(),
+                   foreign = false :: boolean()
                   }).
 
 state_get_worker(#state{worker = Worker}) ->
@@ -59,6 +57,9 @@ deadstate_get_worker(State) ->
 
 deadstate_get_deadlock(State) ->
     State#deadstate.deadlock.
+
+deadstate_is_foreign(State) ->
+    State#deadstate.foreign.
 
 %%%======================
 %%% API Functions
@@ -93,12 +94,6 @@ start_link(Module, Args, Options) ->
                 end
     end.
 
-mon_self() ->
-    case get(?MON_PID) of
-        undefined -> self();
-        Mon -> Mon
-    end.
-
 %%%======================
 %%% gen_server interface
 %%%======================
@@ -108,7 +103,6 @@ call(Server, Request) ->
 call(Server, Request, Timeout) ->
     case get(?MON_PID) of
         undefined ->
-            io:format("#### ~w makes unmonitored call to ~w\n", [self(), Server]),
             gen_server:call(Server, Request, Timeout);
         Mon ->
             gen_statem:call(Mon, {Request, Server}, Timeout)
@@ -127,7 +121,7 @@ stop(Server, Reason, Timeout) ->
 
 init({Module, Args, Options}) ->
     DlsOpts = proplists:get_value(dlstalk_opts, Options, []),
-    ProcOpts = proplists:delete(dlstalk_opts, proplists:delete(name, Options)),
+    ProcOpts = proplists:delete(dlstalk_opts, Options),
     case gen_monitored:start_link(Module, Args, ProcOpts) of
         {ok, Pid} ->
             State =
@@ -137,9 +131,6 @@ init({Module, Args, Options}) ->
                        req_id = undefined
                       },
             put(?PROBE_DELAY, proplists:get_value(probe_delay, DlsOpts, -1)),
-
-            %% tracer:add_tracee_glob(),
-
             {ok, unlocked, State};
         E -> E
     end.
@@ -186,6 +177,7 @@ unlocked({call, {Worker, PTag}}, {_Msg, Server}, _State = #state{worker = Worker
 unlocked({call, {Worker, PTag}}, {Msg, Server}, State = #state{worker = Worker}) ->
     %% Forward the request as `call` asynchronously
     ExtTag = gen_statem:send_request(Server, Msg),
+
     {next_state, locked,
      State#state{
        req_tag = PTag,
@@ -248,7 +240,7 @@ unlocked(info, Msg, State = #state{waitees = Waitees0, worker = Worker}) ->
     end.
 
 
-locked(enter, _, #state{}) ->
+locked(enter, _, _) ->
     keep_state_and_data;
 
 locked({call, From}, '$get_child', #state{worker = Worker}) ->
@@ -261,6 +253,7 @@ locked({call, From}, Msg, State = #state{req_tag = PTag, waitees = Waitees0}) ->
 
     %% Register the request
     Waitees1 = gen_statem:reqids_add(ReqId, From, Waitees0),
+
     case get(?PROBE_DELAY) of
         -1 ->
             %% Send a probe
@@ -305,7 +298,7 @@ locked(info, Msg, State = #state{worker = Worker, req_tag = PTag, req_id = ReqId
               end
               || {_, W} <- gen_statem:reqids_to_list(Waitees)
             ],
-            {next_state, deadlocked, #deadstate{worker = Worker, deadlock = [self() | DL], req_id = ReqId}};
+            {next_state, deadlocked, #deadstate{foreign = true, worker = Worker, deadlock = [self() | DL], req_id = ReqId}};
 
         {reply, Reply} ->
             %% Pass the reply to the process. We are unlocked now.
