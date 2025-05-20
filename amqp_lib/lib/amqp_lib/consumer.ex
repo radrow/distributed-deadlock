@@ -1,6 +1,6 @@
 defmodule AMQPLib.Consumer do
   @moduledoc """
-  Consumer process that processes incoming messages and publishes results.
+  Consumer process assigns a worker to each request.
   """
   use GenServer
   use AMQP
@@ -9,8 +9,7 @@ defmodule AMQPLib.Consumer do
 
   @doc """
   Consumer declares a queue, binds it to the `exchange` with provided `routing_key`.
-  When message is received, `handler_fun` gets called and the result is sent back through
-  the default exchange with `reply_to` routing key that is provided in the original message.
+  When message is received, it replies with the PID of the worker that is supposed to handle the main request.
 
   If the `exchange` parameter is an empty string the direct exchange will be used (equivalent to `"amqp.direct"`).
   If the `queue` parameter is an empty string an auto-generated queue name will be used.
@@ -20,7 +19,6 @@ defmodule AMQPLib.Consumer do
            (binary(), map() -> {:reply, binary()})}
         ) :: GenServer.on_start()
   def start_link({connection_params, exchange, routing_key, queue, handler_fun}) do
-    # NOTE: THIS IS *NOT* CALLED IN DL TESTS
     :dlstalk.start_link(__MODULE__, [
       {connection_params, exchange, routing_key, queue, handler_fun}
     ])
@@ -28,66 +26,41 @@ defmodule AMQPLib.Consumer do
 
   @impl GenServer
   def init([{connection_params, exchange, routing_key, queue, handler_fun}]) do
-    d = start_dealer(connection_params, exchange, routing_key, queue)
+    {:ok, connection} = Connection.open(connection_params)
+    {:ok, channel} = AMQP.Channel.open(connection)
+    {:ok, _} = AMQP.Queue.declare(channel, queue)
+    :ok = AMQP.Queue.bind(channel, queue, exchange, routing_key: routing_key)
+    :ok = AMQP.Basic.qos(channel, prefetch_count: 0)
+    {:ok, tag} = AMQP.Basic.consume(channel, queue, nil, no_ack: true)
 
-    {:ok, %{dealer: d, handler_fun: handler_fun}}
+    Process.flag(:trap_exit, true)
+    {:ok, worker} = AMQPLib.Worker.start_link(handler_fun)
+
+    {:ok,
+     %{channel: channel,
+       consumer_tag: tag,
+       connection: connection,
+       worker: worker,
+     }}
   end
 
   @impl GenServer
   def handle_info({:basic_consume_ok, _}, state), do: {:noreply, state}
 
-  @impl GenServer
-  def handle_call({payload, meta}, from, state) do
-    {:reply, r} = state.handler_fun.(payload, meta)
-
-    r = :erlang.binary_to_term(r)
-    {:reply, r, state}
-  end
-
 
   @impl GenServer
-  def terminate(_reason, %{dealer: d}) do
-    :erlang.send(d, :die)
-    receive do
-      :died -> :ok
-    end
+  def handle_info({:basic_deliver, "get_worker", meta}, state) do
+    worker_bin = :erlang.term_to_binary({:here_i_am, state.worker})
+    :ok = worker_bin |> reply(meta, state.channel)
+    {:noreply, state}
   end
 
-  defp start_dealer(connection_params, exchange, routing_key, queue) do
-    s = :dlstalk.mon_self()
-    :erlang.spawn_link(fn () ->
-      Process.flag(:trap_exit, true)
-
-      {:ok, connection} = Connection.open(connection_params)
-      {:ok, channel} = AMQP.Channel.open(connection)
-      {:ok, _} = AMQP.Queue.declare(channel, queue)
-      :ok = AMQP.Queue.bind(channel, queue, exchange, routing_key: routing_key)
-      :ok = AMQP.Basic.qos(channel, prefetch_count: 0)
-      {:ok, tag} = AMQP.Basic.consume(channel, queue, nil, no_ack: true)
-
-      dealer_loop(s, %{channel: channel, connection: connection, consumer_tag: tag})
-    end)
-  end
-  defp dealer_loop(s, state) do
-    receive do
-      {:basic_deliver, "wake up bro", meta} ->
-        self_bin = :erlang.term_to_binary({:here_i_am, s})
-        :ok = self_bin |> reply(meta, state.channel)
-        dealer_loop(s, state)
-      {:EXIT, _, _} ->
-        dealer_die(state)
-      :die ->
-        dealer_die(state)
-        :erlang.send(s, :died)
-      {:basic_consume_ok, _} ->
-        dealer_loop(s, state)
-    end
-  end
-  defp dealer_die(state) do
+  def terminate(_reason, state) do
     AMQP.Basic.cancel(state.channel, state.consumer_tag)
     AMQP.Channel.close(state.channel)
     AMQP.Connection.close(state.connection)
     Logger.info("Consumer #{inspect({__MODULE__, self()})} terminating")
+    :ok
   end
 
   defp reply(

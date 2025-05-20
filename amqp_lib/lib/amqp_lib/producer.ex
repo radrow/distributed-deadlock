@@ -69,7 +69,7 @@ defmodule AMQPLib.Producer do
         state.channel,
         exchange,
         routing_key,
-        "wake up bro",
+        "get_worker",
         correlation_id: correlation_id,
         reply_to: state.reply_queue,
         expiration: 1_000
