@@ -47,7 +47,6 @@ defmodule AMQPLib.Consumer do
   @impl GenServer
   def handle_info({:basic_consume_ok, _}, state), do: {:noreply, state}
 
-
   @impl GenServer
   def handle_info({:basic_deliver, "get_worker", meta}, state) do
     worker_bin = :erlang.term_to_binary({:here_i_am, state.worker})
@@ -55,6 +54,13 @@ defmodule AMQPLib.Consumer do
     {:noreply, state}
   end
 
+  @impl GenServer
+  def handle_info({:EXIT, who, e}, state) do
+    :erlang.error({:xdd, e})
+    {:stop, :shutdown, state}
+  end
+
+  @impl GenServer
   def terminate(_reason, state) do
     AMQP.Basic.cancel(state.channel, state.consumer_tag)
     AMQP.Channel.close(state.channel)

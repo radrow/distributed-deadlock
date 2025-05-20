@@ -240,7 +240,7 @@ unlocked(info, Msg, State = #state{waitees = Waitees0, worker = Worker}) ->
     end.
 
 
-locked(enter, _, _) ->
+locked(enter, _, #state{}) ->
     keep_state_and_data;
 
 locked({call, From}, '$get_child', #state{worker = Worker}) ->

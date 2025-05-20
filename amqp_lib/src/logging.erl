@@ -127,6 +127,11 @@ c_mon(Mon, SubId) ->
 c_init(Pid) when is_pid(Pid) ->
     {[blue, bold, invert], name(Pid)}.
 
+c_who({global, Term}) ->
+    case global:whereis_name(Term) of
+        undefined -> c_thing(Term);
+        Pid -> c_who(Pid)
+    end;
 c_who(Thing) ->
     case type(Thing) of
         'M' -> c_mon(Thing);
