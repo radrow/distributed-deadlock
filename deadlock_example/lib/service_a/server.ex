@@ -1,11 +1,11 @@
 defmodule ServiceA.Server do
-  use GenServer
+  alias :dlstalk, as: GenServer
 
   require Logger
 
   @spec compute(non_neg_integer()) :: {:ok, non_neg_integer()}
   def compute(id) do
-    :dlstalk.call({:global, {:server_a, id}}, :compute)
+    GenServer.call({:global, {:server_a, id}}, :compute)
   end
 
   @spec child_spec(Keyword.t()) :: Supervisor.child_spec()

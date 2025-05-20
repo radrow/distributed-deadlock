@@ -9,7 +9,7 @@ defmodule AMQPLib.Worker do
 
   @impl GenServer
   def start_link(handler_fun) do
-    :dlstalk.start_link(__MODULE__, [handler_fun])
+    GenServer.start_link(__MODULE__, [handler_fun])
   end
 
   @impl GenServer
@@ -23,5 +23,10 @@ defmodule AMQPLib.Worker do
 
     r = :erlang.binary_to_term(r)
     {:reply, r, state}
+  end
+
+  @impl GenServer
+  def handle_cast(_, state) do
+    {:noreply, state}
   end
 end

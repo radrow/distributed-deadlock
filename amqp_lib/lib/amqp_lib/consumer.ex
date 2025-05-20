@@ -2,7 +2,7 @@ defmodule AMQPLib.Consumer do
   @moduledoc """
   Consumer process assigns a worker to each request.
   """
-  use GenServer
+  alias :dlstalk, as: GenServer
   use AMQP
 
   require Logger
@@ -19,7 +19,7 @@ defmodule AMQPLib.Consumer do
            (binary(), map() -> {:reply, binary()})}
         ) :: GenServer.on_start()
   def start_link({connection_params, exchange, routing_key, queue, handler_fun}) do
-    :dlstalk.start_link(__MODULE__, [
+    GenServer.start_link(__MODULE__, [
       {connection_params, exchange, routing_key, queue, handler_fun}
     ])
   end
@@ -56,8 +56,10 @@ defmodule AMQPLib.Consumer do
 
   @impl GenServer
   def handle_info({:EXIT, who, e}, state) do
-    :erlang.error({:xdd, e})
-    {:stop, :shutdown, state}
+    case who == state.worker do
+      true -> {:stop, :shutdown, state}
+      _ -> {:noreply, state}
+    end
   end
 
   @impl GenServer

@@ -1,11 +1,11 @@
 defmodule ServiceB.Server do
-  use GenServer
+  alias :dlstalk, as: GenServer
 
   require Logger
 
   @spec compute(non_neg_integer()) :: {:ok, non_neg_integer()}
   def compute(id) do
-    :dlstalk.call({:global, {:server_b, id}}, :compute)
+    GenServer.call({:global, {:server_b, id}}, :compute)
   end
 
   @spec child_spec(Keyword.t()) :: Supervisor.child_spec()
@@ -21,7 +21,7 @@ defmodule ServiceB.Server do
 
   @spec start_link(non_neg_integer()) :: GenServer.on_start()
   def start_link(id) do
-    :dlstalk.start_link(__MODULE__, [id], name: {:global, {:server_b, id}})
+    GenServer.start_link(__MODULE__, [id], name: {:global, {:server_b, id}})
   end
 
   @impl GenServer

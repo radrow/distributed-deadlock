@@ -2,8 +2,6 @@ defmodule ServiceA.ServerTest do
   use ExUnit.Case
 
   setup_all do
-    :io.format(~c"INIT TEST\n")
-
     {logKnown, logFresh} = :logging.mk_ets()
     log_opts = [{:logging_ets_known, logKnown},
                 {:logging_ets_fresh, logFresh},
@@ -16,12 +14,6 @@ defmodule ServiceA.ServerTest do
     :logging.conf(log_opts)
     :tracer.start_link([], log_opts)
     :ok
-
-    # on_exit(fn ->
-    #   :io.format(~c"EXITING TEST\n")
-    #   log = :tracer.finish(:dls_tracer)
-    #   :logging.delete()
-    # end)
   end
 
   setup do

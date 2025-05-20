@@ -18,9 +18,8 @@
 -define(KNOWN_ETS, '$logging_known').
 -define(FRESH_ETS, '$logging_fresh').
 
--define(KNOWN, get(?KNOWN_ETS)).
--define(FRESH, get(?FRESH_ETS)).
-
+-define(KNOWN, case get(?KNOWN_ETS) of undefined -> ?KNOWN_ETS; X -> X end).
+-define(FRESH, case get(?FRESH_ETS) of undefined -> ?FRESH_ETS; X -> X end).
 
 mk_ets() ->
     Known = ets:new(?KNOWN_ETS, [public]),
