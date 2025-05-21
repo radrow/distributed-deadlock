@@ -41,8 +41,6 @@ defmodule ServiceA.ServerTest do
     test "id 42 has a bug and deadlocks until timeouts are triggered", %{
       connection_params: connection_params
     } do
-      :io.format(~c"########\n### TESTING PID: ~w\n########\n", [self()])
-
       id = 42
       pid_producer = start_supervised!({AMQPLib.Producer, connection_params})
 
@@ -57,7 +55,7 @@ defmodule ServiceA.ServerTest do
       pid_consumer_b = start_supervised!({ServiceB.Consumer, connection_params})
 
 
-      ppid_server_a =   :gen_statem.call(pid_server_a, :'$get_child')
+      ppid_server_a =   :gen_statem.call(pid_server_a,    :'$get_child')
       ppid_server_b =   :gen_statem.call(pid_server_b,    :'$get_child')
       ppid_consumer_a = :gen_statem.call(pid_consumer_a,  :'$get_child')
       ppid_consumer_b = :gen_statem.call(pid_consumer_b,  :'$get_child')

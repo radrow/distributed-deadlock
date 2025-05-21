@@ -1,6 +1,6 @@
 defmodule AMQPLib.Worker do
   @moduledoc """
-  Worker processes incoming messages and publishes results.
+  Worker process bridges between consumer and service implementation.
   """
   alias :dlstalk, as: GenServer
   use AMQP
