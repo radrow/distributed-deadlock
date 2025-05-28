@@ -3,7 +3,7 @@
 -export([grid_printer/2]).
 -export([run/1, run/2]).
 
--include("dlstalk.hrl").
+-include("ddmon.hrl").
 
 
 %% Turns a session description into something evaluable:
@@ -122,7 +122,7 @@ run_scenario(Scenario, Opts) ->
                          end,
                   ChildSpec =
                       #{id => I,
-                        start => {GsModule, start_link, [I, Args, [{dlstalk_opts, Opts}]]},
+                        start => {GsModule, start_link, [I, Args, [{ddmon_opts, Opts}]]},
                         restart => transient,
                         shutdown => 5000,
                         type => worker},

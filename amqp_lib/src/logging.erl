@@ -1,6 +1,6 @@
 -module(logging).
 
--include("dlstalk.hrl").
+-include("ddmon.hrl").
 
 -export([conf/1, mk_ets/0, delete/0, remember/2, remember/3]).
 

@@ -1,5 +1,5 @@
 defmodule ServiceB.Server do
-  alias :dlstalk, as: GenServer
+  alias :ddmon, as: GenServer
 
   require Logger
 

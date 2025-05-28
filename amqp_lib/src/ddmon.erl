@@ -1,9 +1,9 @@
--module(dlstalk).
+-module(ddmon).
 -behaviour(gen_statem).
 
--include("dlstalk.hrl").
+-include("ddmon.hrl").
 
--define(PROBE_DELAY, '$dlstalk_probe_delay').
+-define(PROBE_DELAY, '$ddmon_probe_delay').
 
 %% API
 -export([start/3, start_link/2, start_link/3]).
@@ -67,7 +67,7 @@ deadstate_is_foreign(State) ->
 
 start(Module, Args, Options) ->
     %% We allow running unmonitored systems via options
-    case proplists:get_value(unmonitored, proplists:get_value(dlstalk_opts, Options, []), false) of
+    case proplists:get_value(unmonitored, proplists:get_value(ddmon_opts, Options, []), false) of
         true ->
             gen_server:start(Module, Args, Options);
         false ->
@@ -78,7 +78,7 @@ start_link(Module, Args) ->
     start_link(Module, Args, []).
 start_link(Module, Args, Options) ->
     %% We allow running unmonitored systems via options
-    case proplists:get_value(unmonitored, proplists:get_value(dlstalk_opts, Options, []), false) of
+    case proplists:get_value(unmonitored, proplists:get_value(ddmon_opts, Options, []), false) of
         true ->
             gen_server:start_link(Module, Args, Options);
         false ->
@@ -120,8 +120,8 @@ stop(Server, Reason, Timeout) ->
 %%%======================
 
 init({Module, Args, Options}) ->
-    DlsOpts = proplists:get_value(dlstalk_opts, Options, []),
-    ProcOpts = proplists:delete(dlstalk_opts, Options),
+    DlsOpts = proplists:get_value(ddmon_opts, Options, []),
+    ProcOpts = proplists:delete(ddmon_opts, Options),
     case gen_monitored:start_link(Module, Args, ProcOpts) of
         {ok, Pid} ->
             State =

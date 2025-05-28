@@ -22,8 +22,8 @@ defmodule AMQPLib.Producer do
                 {:amqp_call, exchange, routing_key, :get_worker}
               )
     {:here_i_am, worker} = :erlang.binary_to_term(worker_bin)
-    case :dlstalk.call(worker, {payload, meta}) do
-      {:'$dlstalk_deadlock_spread', l} -> throw({:deadlock, l})
+    case :ddmon.call(worker, {payload, meta}) do
+      {:'$ddmon_deadlock_spread', l} -> throw({:deadlock, l})
       res ->
         res = :erlang.term_to_binary(res)
         {:ok, res, meta}

@@ -1,5 +1,5 @@
 defmodule ServiceA.Server do
-  alias :dlstalk, as: GenServer
+  alias :ddmon, as: GenServer
 
   require Logger
 
@@ -21,7 +21,7 @@ defmodule ServiceA.Server do
 
   @spec start_link(non_neg_integer()) :: GenServer.on_start()
   def start_link(id) do
-    :dlstalk.start_link(__MODULE__, [id], name: {:global, {:server_a, id}})
+    :ddmon.start_link(__MODULE__, [id], name: {:global, {:server_a, id}})
   end
 
   @impl GenServer

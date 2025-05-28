@@ -2,7 +2,7 @@ defmodule AMQPLib.Worker do
   @moduledoc """
   Worker process bridges between consumer and service implementation.
   """
-  alias :dlstalk, as: GenServer
+  alias :ddmon, as: GenServer
   use AMQP
 
   require Logger

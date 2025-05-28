@@ -2,7 +2,7 @@ defmodule AMQPLib.Consumer do
   @moduledoc """
   Consumer process assigns a worker to each request.
   """
-  alias :dlstalk, as: GenServer
+  alias :ddmon, as: GenServer
   use AMQP
 
   require Logger

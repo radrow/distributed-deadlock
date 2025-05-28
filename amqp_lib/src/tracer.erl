@@ -1,6 +1,6 @@
 -module(tracer).
 
--include("dlstalk.hrl").
+-include("ddmon.hrl").
 
 -export([ start_link/1, start_link/2
         , finish/1, finish/2
@@ -57,7 +57,7 @@ add_tracee_glob(Who) ->
     receive {ok, {add, Self, Who}} -> ok end.
 
 config_tracer(Opts) ->
-    {module, dlstalk} = code:ensure_loaded(dlstalk),
+    {module, ddmon} = code:ensure_loaded(ddmon),
 
     logging:conf(Opts),
 
@@ -75,15 +75,15 @@ config_tracer(Opts) ->
      ),
 
     erlang:trace_pattern( % TODO in OTP27 wildcard function name
-      {dlstalk, unlocked, 3},
+      {ddmon, unlocked, 3},
       [ {['_', '_', '_'], [], [trace]} ]
      ),
     erlang:trace_pattern(
-      {dlstalk, locked, 3},
+      {ddmon, locked, 3},
       [ {['_', '_', '_'], [], [trace]} ]
      ),
     erlang:trace_pattern(
-      {dlstalk, deadlocked, 3},
+      {ddmon, deadlocked, 3},
       [ {['_', '_', '_'], [], [trace]} ]
      ),
 
@@ -131,22 +131,22 @@ finish(Tracer, Tracees) ->
 
 %% State change
 handle({trace_ts, Who, 'call',
-        {dlstalk, State, [enter, _, Internal]}, Time}) ->
+        {ddmon, State, [enter, _, Internal]}, Time}) ->
     case State of
         unlocked ->
             {Time, Who, {state, unlocked}};
         locked ->
-            {Time, Who, {state, {locked, dlstalk:state_get_req_tag(Internal)}}};
+            {Time, Who, {state, {locked, ddmon:state_get_req_tag(Internal)}}};
         deadlocked ->
-            {Time, Who, {state, {deadlocked, dlstalk:deadstate_get_deadlock(Internal)}}}
+            {Time, Who, {state, {deadlocked, ddmon:deadstate_get_deadlock(Internal)}}}
     end;
 
 %% Pick query
 
 handle({trace_ts, Who, 'call',
-        {dlstalk, _, [{call, {From, _}}, Msg, Internal]}, Time}) ->
+        {ddmon, _, [{call, {From, _}}, Msg, Internal]}, Time}) ->
     ?IF_OPT(trace_int,
-            case dlstalk:state_get_worker(Internal) == From of
+            case ddmon:state_get_worker(Internal) == From of
                 false ->
                     %% External
                     {Time, Who, {pick, {query, From, Msg}}};
@@ -158,33 +158,33 @@ handle({trace_ts, Who, 'call',
 
 %% Pick reply (unlocked --- from proc)
 handle({trace_ts, Who, 'call',
-        {dlstalk, unlocked, [info, {_From, Msg}, _]}, Time}) ->
+        {ddmon, unlocked, [info, {_From, Msg}, _]}, Time}) ->
 
     ?IF_OPT(trace_int, {Time, Who, {pick, {proc_reply, Msg}}});
 
 %% Pick reply (locked --- external)
 handle({trace_ts, Who, 'call',
-        {dlstalk, locked, [info, {_From, Msg}, _]}, Time}) ->
+        {ddmon, locked, [info, {_From, Msg}, _]}, Time}) ->
     ?IF_OPT(trace_int, {Time, Who, {pick, {reply, Msg}}});
 
 %% Pick deadlock notification
 handle({trace_ts, _Who, 'call',
-        {dlstalk, _, [info, {_, {?YOU_DIED, _}}, _]}, _Time}) ->
+        {ddmon, _, [info, {_, {?YOU_DIED, _}}, _]}, _Time}) ->
     ignore;
 
 %% Pick probe
 handle({trace_ts, Who, 'call',
-        {dlstalk, _, [cast, {?PROBE, Probe, _Chain}, _]}, Time}) ->
+        {ddmon, _, [cast, {?PROBE, Probe, _Chain}, _]}, Time}) ->
     ?IF_OPT(trace_int, {Time, Who, {pick, {probe, Probe}}});
 
 %% Pick cast
 handle({trace_ts, _Who, 'call',
-        {dlstalk, _, [cast, {_From, _Msg}, _]}, _Time}) ->
+        {ddmon, _, [cast, {_From, _Msg}, _]}, _Time}) ->
     ignore;
 
 %% Pick scheduled probe
 handle({trace_ts, _Who, 'call',
-        {dlstalk, _, [cast, {?SCHEDULED_PROBE, _, _}, _]}, _Time}) ->
+        {ddmon, _, [cast, {?SCHEDULED_PROBE, _, _}, _]}, _Time}) ->
     ignore;
 
 %% Receive query (gen_statem --- no alias)
