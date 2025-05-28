@@ -25,7 +25,6 @@ defmodule AMQPLib.Producer do
     case :ddmon.call(worker, {payload, meta}) do
       {:'$ddmon_deadlock_spread', l} -> throw({:deadlock, l})
       res ->
-        res = :erlang.term_to_binary(res)
         {:ok, res, meta}
     end
   end

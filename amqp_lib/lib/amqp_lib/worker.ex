@@ -21,7 +21,6 @@ defmodule AMQPLib.Worker do
   def handle_call({payload, meta}, from, state) do
     {:reply, r} = state.handler_fun.(payload, meta)
 
-    r = :erlang.binary_to_term(r)
     {:reply, r, state}
   end
 
