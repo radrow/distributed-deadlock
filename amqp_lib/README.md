@@ -5,6 +5,8 @@ The library provides an abstraction layer over [amqp](https://github.com/pma/amq
 
 Currently only supports synchronous producer calls and doesn't really handle errors but rather crashes. Also, each consumer and producer creates a new TLS connection to the broker which isn't very efficient.
 
+To secure compatibility with DDMon, replicated services are not called by the consumer directly. Instead, the consumer assigns a worker service to each request and returns a reference to it (its name or PID), so that the user can call the service directly.
+
 ## Installation
 
 ```elixir
